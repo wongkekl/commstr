@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Live Poll - Presenter</title>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 700px; margin: 40px auto; padding: 20px; }
+    button { padding: 10px 16px; margin: 6px; cursor: pointer; }
+    .bar-container { margin: 10px 0; }
+    .bar-label { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 4px; }
+    .bar { background: #eee; height: 28px; border-radius: 4px; overflow: hidden; }
+    .bar-fill { background: #4f46e5; height: 100%; transition: width 0.3s; }
+    .open-answer { background: #f5f5f5; padding: 8px 12px; margin: 6px 0; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <h1>Live Poll Presenter</h1>
+  <div id="setup">
+    <button id="newSession">Start New Session</button>
+    <p id="status">Loading...</p>
+  </div>
+  <div id="session" style="display:none;">
+    <p>Join code: <strong id="code" style="font-size: 1.4em;"></strong></p>
+    <div id="qr" style="margin: 16px 0;"></div>
+    <p>Current question: <span id="qIndex">1</span> / <span id="totalQ"></span></p>
+    <h2 id="questionText"></h2>
+    <div id="results"></div>
+    <div>
+      <button id="prev">← Previous</button>
+      <button id="next">Next →</button>
+    </div>
+  </div>
+
+  <script>
+    const firebaseConfig = {
+  apiKey: "AIzaSyAjSdNx1bKFfhOmD6WnuVlFgaWGbR6-KI4",
+  authDomain: "comm-strategy.firebaseapp.com",
+  databaseURL: "https://comm-strategy-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "comm-strategy",
+  storageBucket: "comm-strategy.firebasestorage.app",
+  messagingSenderId: "1008243068419",
+  appId: "1:1008243068419:web:31d87704cf61283a4b8836",
+  measurementId: "G-P43MYP66ES"
+};
+
+    let db = null;
+
+    try {
+      firebase.initializeApp(firebaseConfig);
+      db = firebase.database();
+      document.getElementById("status").textContent = "Firebase connected ✓";
+    } catch (e) {
+      document.getElementById("status").textContent = "Config problem: " + e.message;
+    }
+
+    let sessionId = null;
+    const questions = [
+      { type: "yesno", text: "Do you agree with the proposal?" },
+      { type: "rating", text: "Rate the presentation so far (1-5)" },
+      { type: "open", text: "What is your main concern?" }
+    ];
+    let currentIndex = 0;
+    let allVotes = {};
+
+    document.getElementById("newSession").onclick = async function () {
+      if (!db) {
+        document.getElementById("status").textContent = "Database not ready.";
+        return;
+      }
+      document.getElementById("status").textContent = "Creating session...";
+      try {
+        sessionId = Math.random().toString(36).slice(2, 8).toUpperCase();
+        await db.ref("sessions/" + sessionId).set({
+          questions: questions,
+          currentIndex: 0
+        });
+        document.getElementById("setup").style.display = "none";
+        document.getElementById("session").style.display = "block";
+        document.getElementById("code").textContent = sessionId;
+        document.getElementById("totalQ").textContent = questions.length;
+
+        const joinUrl = window.location.href.replace("presenter.html", "join.html") + "?code=" + sessionId;
+        document.getElementById("qr").innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(joinUrl)}" alt="QR Code">`;
+
+        listenForVotes();
+        updateQuestion();
+      } catch (err) {
+        document.getElementById("status").textContent = "Error: " + err.message;
+      }
+    };
+
+    function listenForVotes() {
+      db.ref("sessions/" + sessionId + "/votes").on("value", function (snap) {
+        allVotes = snap.val() || {};
+        renderResults();
+      });
+    }
+
+    function updateQuestion() {
+      const q = questions[currentIndex];
+      document.getElementById("qIndex").textContent = currentIndex + 1;
+      document.getElementById("questionText").textContent = q.text;
+      if (db && sessionId) {
+        db.ref("sessions/" + sessionId + "/currentIndex").set(currentIndex);
+      }
+      renderResults();
+    }
+
+    function renderResults() {
+      const resultsDiv = document.getElementById("results");
+      const q = questions[currentIndex];
+      if (!q) return;
+
+      // Collect answers for the current question only
+      const answers = [];
+      for (const key in allVotes) {
+        const vote = allVotes[key];
+        if (vote.questionIndex === currentIndex) {
+          answers.push(vote.answer);
+        }
+      }
+
+      if (answers.length === 0) {
+        resultsDiv.innerHTML = "<p>Waiting for responses...</p>";
+        return;
+      }
+
+      if (q.type === "yesno" || q.type === "rating") {
+        // Count occurrences
+        const counts = {};
+        answers.forEach(function (a) {
+          counts[a] = (counts[a] || 0) + 1;
+        });
+        const total = answers.length;
+        let html = "";
+        const sortedKeys = Object.keys(counts).sort();
+        sortedKeys.forEach(function (key) {
+          const count = counts[key];
+          const percent = Math.round((count / total) * 100);
+          html += `
+            <div class="bar-container">
+              <div class="bar-label"><span>${key}</span><span>${count} (${percent}%)</span></div>
+              <div class="bar"><div class="bar-fill" style="width:${percent}%"></div></div>
+            </div>
+          `;
+        });
+        resultsDiv.innerHTML = html;
+      } else if (q.type === "open") {
+        let html = "";
+        answers.forEach(function (a) {
+          html += `<div class="open-answer">${a}</div>`;
+        });
+        resultsDiv.innerHTML = html || "<p>No responses yet.</p>";
+      }
+    }
+
+    document.getElementById("next").onclick = function () {
+      if (currentIndex < questions.length - 1) {
+        currentIndex++;
+        updateQuestion();
+      }
+    };
+    document.getElementById("prev").onclick = function () {
+      if (currentIndex > 0) {
+        currentIndex--;
+        updateQuestion();
+      }
+    };
+  </script>
+</body>
+</html>
