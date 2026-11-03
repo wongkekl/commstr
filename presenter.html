@@ -6,32 +6,117 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
   <style>
-    body { font-family: system-ui, sans-serif; max-width: 800px; margin: 30px auto; padding: 20px; }
-    button { padding: 8px 14px; margin: 4px; cursor: pointer; }
-    .bar-container { margin: 10px 0; }
-    .bar-label { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 4px; }
-    .bar { background: #eee; height: 28px; border-radius: 4px; overflow: hidden; }
-    .bar-fill { background: #4f46e5; height: 100%; transition: width 0.3s; }
-    .open-answer { background: #f5f5f5; padding: 8px 12px; margin: 6px 0; border-radius: 4px; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f8fafc;
+      color: #1e293b;
+      margin: 0;
+      padding: 40px 20px;
+      min-height: 100vh;
+    }
+    .container {
+      max-width: 720px;
+      margin: 0 auto;
+    }
+    h1 {
+      color: #1e3a8a;
+      font-size: 2rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .subtitle {
+      color: #64748b;
+      margin-bottom: 32px;
+    }
+    button {
+      background: #1e3a8a;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    button:hover { background: #1e40af; }
+    button.secondary {
+      background: #e2e8f0;
+      color: #1e293b;
+    }
+    button.secondary:hover { background: #cbd5e1; }
+    #setup, #session {
+      background: white;
+      border-radius: 16px;
+      padding: 32px;
+      box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+    }
+    #code {
+      font-size: 2.5rem;
+      font-weight: 700;
+      color: #1e3a8a;
+      letter-spacing: 2px;
+    }
+    #questionText {
+      font-size: 1.5rem;
+      font-weight: 600;
+      margin: 24px 0;
+      line-height: 1.4;
+    }
+    .bar-container { margin: 16px 0; }
+    .bar-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 14px;
+      margin-bottom: 6px;
+      font-weight: 500;
+    }
+    .bar {
+      background: #e2e8f0;
+      height: 36px;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .bar-fill {
+      background: #1e3a8a;
+      height: 100%;
+      transition: width 0.4s ease;
+    }
+    .open-answer {
+      background: #f1f5f9;
+      padding: 12px 16px;
+      margin: 8px 0;
+      border-radius: 8px;
+      border-left: 4px solid #1e3a8a;
+    }
+    #qr { margin: 20px 0; text-align: center; }
+    #qr img { border-radius: 12px; }
+    .nav-buttons { margin-top: 24px; display: flex; gap: 12px; }
+    #status { color: #64748b; margin-top: 16px; }
   </style>
 </head>
 <body>
-  <h1>CE Assessment</h1>
+  <div class="container">
+    <h1>CE Assessment</h1>
+    <p class="subtitle">Live audience response</p>
 
-  <div id="setup">
-    <button id="newSession">Start New Session</button>
-    <p id="status">Loading...</p>
-  </div>
+    <div id="setup">
+      <button id="newSession">Start New Session</button>
+      <p id="status">Loading...</p>
+    </div>
 
-  <div id="session" style="display:none;">
-    <p>Join code: <strong id="code" style="font-size: 1.4em;"></strong></p>
-    <div id="qr" style="margin: 16px 0;"></div>
-    <p>Current question: <span id="qIndex">1</span> / <span id="totalQ"></span></p>
-    <h2 id="questionText"></h2>
-    <div id="results"></div>
-    <div>
-      <button id="prev">← Previous</button>
-      <button id="next">Next →</button>
+    <div id="session" style="display:none;">
+      <p style="margin:0; color:#64748b;">Join code</p>
+      <div id="code"></div>
+      <div id="qr"></div>
+      <p style="color:#64748b;">Question <span id="qIndex">1</span> of <span id="totalQ"></span></p>
+      <h2 id="questionText"></h2>
+      <div id="results"></div>
+      <div class="nav-buttons">
+        <button id="prev" class="secondary">← Previous</button>
+        <button id="next">Next →</button>
+      </div>
     </div>
   </div>
 
@@ -61,7 +146,6 @@
       document.getElementById("status").textContent = "Config error: " + e.message;
     }
 
-    // Load questions from localStorage (set by the editor page)
     const saved = localStorage.getItem("ce_questions");
     if (saved) {
       questions = JSON.parse(saved);
@@ -88,7 +172,7 @@
         document.getElementById("totalQ").textContent = questions.length;
 
         const joinUrl = "https://wongkekl.github.io/commstr/join.html?code=" + sessionId;
-        document.getElementById("qr").innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(joinUrl)}" alt="QR Code">`;
+        document.getElementById("qr").innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(joinUrl)}" alt="QR Code">`;
 
         listenForVotes();
         updateQuestion();
@@ -128,7 +212,7 @@
       }
 
       if (answers.length === 0) {
-        resultsDiv.innerHTML = "<p>Waiting for responses...</p>";
+        resultsDiv.innerHTML = "<p style='color:#64748b;'>Waiting for responses...</p>";
         return;
       }
 
@@ -142,7 +226,7 @@
           const percent = Math.round((count / total) * 100);
           html += `
             <div class="bar-container">
-              <div class="bar-label"><span>${key}</span><span>${count} (${percent}%)</span></div>
+              <div class="bar-label"><span>${key}</span><span>${count} · ${percent}%</span></div>
               <div class="bar"><div class="bar-fill" style="width:${percent}%"></div></div>
             </div>`;
         });
