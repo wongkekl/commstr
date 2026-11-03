@@ -9,6 +9,7 @@
     input, select { width: 100%; padding: 8px; margin: 4px 0; box-sizing: border-box; }
     .section { border: 1px solid #ddd; border-radius: 10px; padding: 16px; margin: 16px 0; }
     .question-item { border: 1px solid #eee; padding: 10px; margin: 8px 0; border-radius: 6px; }
+    .correct-row { margin-top: 6px; font-size: 14px; }
   </style>
 </head>
 <body>
@@ -30,6 +31,7 @@
           subtitle: "How you deal with Contractor on CE assessment",
           questions: [
             { type: "yesno", text: "Do you agree with the current CE process?" },
+            { type: "yesno-correct", text: "Is the CE process documented?", correct: "Yes" },
             { type: "open", text: "What is your main concern?" }
           ]
         },
@@ -67,17 +69,38 @@
       sections[si].questions.forEach((q, qi) => {
         const item = document.createElement("div");
         item.className = "question-item";
+        let correctHtml = "";
+        if (q.type === "yesno-correct") {
+          correctHtml = `
+            <div class="correct-row">
+              Correct answer:
+              <select onchange="sections[${si}].questions[${qi}].correct=this.value">
+                <option value="Yes" ${q.correct === "Yes" ? "selected" : ""}>Yes</option>
+                <option value="No" ${q.correct === "No" ? "selected" : ""}>No</option>
+              </select>
+            </div>`;
+        }
         item.innerHTML = `
-          <select onchange="sections[${si}].questions[${qi}].type=this.value">
+          <select onchange="changeType(${si},${qi},this.value)">
             <option value="yesno" ${q.type==="yesno"?"selected":""}>Yes / No</option>
+            <option value="yesno-correct" ${q.type==="yesno-correct"?"selected":""}>Yes / No (with correct answer)</option>
             <option value="rating" ${q.type==="rating"?"selected":""}>Rating (1-5)</option>
             <option value="open" ${q.type==="open"?"selected":""}>Open-ended</option>
           </select>
           <input type="text" value="${q.text}" oninput="sections[${si}].questions[${qi}].text=this.value">
+          ${correctHtml}
           <button onclick="sections[${si}].questions.splice(${qi},1);render()">Remove</button>
         `;
         list.appendChild(item);
       });
+    }
+
+    function changeType(si, qi, newType) {
+      sections[si].questions[qi].type = newType;
+      if (newType === "yesno-correct" && !sections[si].questions[qi].correct) {
+        sections[si].questions[qi].correct = "Yes";
+      }
+      render();
     }
 
     function addQ(si) {
