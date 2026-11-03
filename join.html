@@ -3,19 +3,22 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Join Live Poll</title>
+  <title>Join CE Assessment</title>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
   <style>
     body { font-family: system-ui, sans-serif; max-width: 480px; margin: 20px auto; padding: 16px; }
-    button, input, textarea { width: 100%; padding: 12px; margin: 8px 0; box-sizing: border-box; font-size: 16px; }
+    button, input, textarea { width: 100%; padding: 14px; margin: 8px 0; box-sizing: border-box; font-size: 16px; }
+    h2 { color: #1e3a8a; }
   </style>
 </head>
 <body>
-  <h2>Join Poll</h2>
-  <input id="codeInput" placeholder="Enter code" />
-  <button id="joinBtn">Join</button>
-  <p id="status">Ready</p>
+  <h2>CE Assessment</h2>
+  <div id="joinArea">
+    <input id="codeInput" placeholder="Enter code" />
+    <button id="joinBtn">Join</button>
+    <p id="status">Ready</p>
+  </div>
   <div id="poll" style="display:none;">
     <h3 id="qText"></h3>
     <div id="answerArea"></div>
@@ -23,51 +26,56 @@
   </div>
 
   <script>
-const firebaseConfig = {
-  apiKey: "AIzaSyAjSdNx1bKFfhOmD6WnuVlFgaWGbR6-KI4",
-  authDomain: "comm-strategy.firebaseapp.com",
-  databaseURL: "https://comm-strategy-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "comm-strategy",
-  storageBucket: "comm-strategy.firebasestorage.app",
-  messagingSenderId: "1008243068419",
-  appId: "1:1008243068419:web:31d87704cf61283a4b8836",
-  measurementId: "G-P43MYP66ES"
-};
+    const firebaseConfig = {
+      apiKey: "AIzaSyAjSdNx1bKFfhOmD6WnuVlFgaWGbR6-KI4",
+      authDomain: "comm-strategy.firebaseapp.com",
+      databaseURL: "https://comm-strategy-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "comm-strategy",
+      storageBucket: "comm-strategy.firebasestorage.app",
+      messagingSenderId: "1008243068419",
+      appId: "1:1008243068419:web:31d87704cf61283a4b8836",
+      measurementId: "G-P43MYP66ES"
+    };
 
     let db = null;
-
     try {
       firebase.initializeApp(firebaseConfig);
       db = firebase.database();
-      document.getElementById("status").textContent = "Firebase connected ✓";
     } catch (e) {
-      document.getElementById("status").textContent = "Config problem: " + e.message;
+      document.getElementById("status").textContent = "Config error";
     }
 
     let sessionId = null;
 
-    document.getElementById("joinBtn").onclick = function () {
-      if (!db) {
-        document.getElementById("status").textContent = "Database not ready. Fix the firebaseConfig first.";
-        return;
-      }
-      sessionId = document.getElementById("codeInput").value.trim().toUpperCase();
-      document.getElementById("status").textContent = "Joining...";
+    // Auto-join if code is in the URL (from QR code)
+    const params = new URLSearchParams(window.location.search);
+    const urlCode = params.get("code");
+    if (urlCode) {
+      document.getElementById("codeInput").value = urlCode;
+      setTimeout(() => joinSession(urlCode), 300);
+    }
 
+    document.getElementById("joinBtn").onclick = () => {
+      const code = document.getElementById("codeInput").value.trim().toUpperCase();
+      joinSession(code);
+    };
+
+    function joinSession(code) {
+      if (!db || !code) return;
+      sessionId = code.toUpperCase();
+      document.getElementById("status").textContent = "Joining...";
       db.ref("sessions/" + sessionId).once("value").then(function (snap) {
         if (!snap.exists()) {
-          document.getElementById("status").textContent = "Invalid code. Please check and try again.";
+          document.getElementById("status").textContent = "Invalid code.";
           return;
         }
+        document.getElementById("joinArea").style.display = "none";
         document.getElementById("poll").style.display = "block";
-        document.getElementById("joinBtn").style.display = "none";
-        document.getElementById("codeInput").style.display = "none";
-        document.getElementById("status").textContent = "Joined!";
         listen();
       }).catch(function (err) {
         document.getElementById("status").textContent = "Error: " + err.message;
       });
-    };
+    }
 
     function listen() {
       db.ref("sessions/" + sessionId).on("value", function (snap) {
@@ -85,30 +93,24 @@ const firebaseConfig = {
       area.innerHTML = "";
       document.getElementById("answerStatus").textContent = "";
 
-      if (q.type === "yesno") {
+      if (q.type === "yesno" || q.type === "yesno-correct") {
         area.innerHTML = `
           <button class="option" data-val="Yes">Yes</button>
           <button class="option" data-val="No">No</button>
         `;
       } else if (q.type === "rating") {
-        area.innerHTML = [1,2,3,4,5].map(function (n) {
-          return `<button class="option" data-val="${n}">${n}</button>`;
-        }).join("");
+        area.innerHTML = [1,2,3,4,5].map(n => `<button class="option" data-val="${n}">${n}</button>`).join("");
       } else if (q.type === "open") {
         area.innerHTML = `<textarea id="openText" rows="4" placeholder="Type your answer"></textarea>
                           <button id="sendOpen">Submit</button>`;
       }
 
-      const buttons = area.querySelectorAll(".option");
-      for (let i = 0; i < buttons.length; i++) {
-        buttons[i].onclick = function () {
-          submitAnswer(questionIndex, this.dataset.val);
-        };
-      }
-
+      area.querySelectorAll(".option").forEach(btn => {
+        btn.onclick = () => submitAnswer(questionIndex, btn.dataset.val);
+      });
       const openBtn = document.getElementById("sendOpen");
       if (openBtn) {
-        openBtn.onclick = function () {
+        openBtn.onclick = () => {
           const answer = document.getElementById("openText").value.trim();
           if (answer) submitAnswer(questionIndex, answer);
         };
@@ -120,9 +122,9 @@ const firebaseConfig = {
       db.ref("sessions/" + sessionId + "/votes/" + voteId).set({
         questionIndex: questionIndex,
         answer: answer
-      }).then(function () {
-        document.getElementById("answerStatus").textContent = "Submitted! Waiting for next question...";
-      }).catch(function (err) {
+      }).then(() => {
+        document.getElementById("answerStatus").textContent = "Submitted!";
+      }).catch(err => {
         document.getElementById("answerStatus").textContent = "Error: " + err.message;
       });
     }
