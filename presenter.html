@@ -2,14 +2,12 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Live Poll - Presenter</title>
+  <title>CE Assessment</title>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
   <style>
     body { font-family: system-ui, sans-serif; max-width: 800px; margin: 30px auto; padding: 20px; }
     button { padding: 8px 14px; margin: 4px; cursor: pointer; }
-    input, select { width: 100%; padding: 8px; margin: 4px 0; box-sizing: border-box; }
-    .question-item { border: 1px solid #ddd; padding: 12px; margin: 10px 0; border-radius: 6px; }
     .bar-container { margin: 10px 0; }
     .bar-label { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 4px; }
     .bar { background: #eee; height: 28px; border-radius: 4px; overflow: hidden; }
@@ -18,13 +16,9 @@
   </style>
 </head>
 <body>
-  <h1>Live Poll Presenter</h1>
+  <h1>CE Assessment</h1>
 
-  <div id="editor">
-    <h2>Questions</h2>
-    <div id="questionList"></div>
-    <button id="addQuestion">+ Add Question</button>
-    <hr>
+  <div id="setup">
     <button id="newSession">Start New Session</button>
     <p id="status">Loading...</p>
   </div>
@@ -38,7 +32,6 @@
     <div>
       <button id="prev">← Previous</button>
       <button id="next">Next →</button>
-      <button id="backToEditor">Edit Questions</button>
     </div>
   </div>
 
@@ -55,77 +48,33 @@
     };
 
     let db = null;
-    let questions = [
-      { type: "yesno", text: "Do you agree with the proposal?" },
-      { type: "rating", text: "Rate the presentation so far (1-5)" },
-      { type: "open", text: "What is your main concern?" }
-    ];
+    let questions = [];
     let sessionId = null;
     let currentIndex = 0;
     let allVotes = {};
 
-    function initFirebase() {
-      try {
-        if (typeof firebase === "undefined") {
-          document.getElementById("status").textContent = "Firebase script failed to load. Check your internet connection.";
-          return;
-        }
-        firebase.initializeApp(firebaseConfig);
-        db = firebase.database();
-        document.getElementById("status").textContent = "Firebase connected ✓";
-        renderQuestionList();
-      } catch (e) {
-        document.getElementById("status").textContent = "Config error: " + e.message;
-        console.error(e);
-      }
+    try {
+      firebase.initializeApp(firebaseConfig);
+      db = firebase.database();
+      document.getElementById("status").textContent = "Ready";
+    } catch (e) {
+      document.getElementById("status").textContent = "Config error: " + e.message;
     }
 
-    function renderQuestionList() {
-      const list = document.getElementById("questionList");
-      list.innerHTML = "";
-      questions.forEach((q, i) => {
-        const div = document.createElement("div");
-        div.className = "question-item";
-        div.innerHTML = `
-          <select data-index="${i}" class="q-type">
-            <option value="yesno" ${q.type === "yesno" ? "selected" : ""}>Yes / No</option>
-            <option value="rating" ${q.type === "rating" ? "selected" : ""}>Rating (1-5)</option>
-            <option value="open" ${q.type === "open" ? "selected" : ""}>Open-ended</option>
-          </select>
-          <input type="text" data-index="${i}" class="q-text" value="${q.text}" placeholder="Question text">
-          <button class="remove" data-index="${i}">Remove</button>
-        `;
-        list.appendChild(div);
-      });
-
-      document.querySelectorAll(".q-type").forEach(el => {
-        el.onchange = () => { questions[el.dataset.index].type = el.value; };
-      });
-      document.querySelectorAll(".q-text").forEach(el => {
-        el.oninput = () => { questions[el.dataset.index].text = el.value; };
-      });
-      document.querySelectorAll(".remove").forEach(el => {
-        el.onclick = () => {
-          questions.splice(el.dataset.index, 1);
-          renderQuestionList();
-        };
-      });
+    // Load questions from localStorage (set by the editor page)
+    const saved = localStorage.getItem("ce_questions");
+    if (saved) {
+      questions = JSON.parse(saved);
+    } else {
+      questions = [
+        { type: "yesno", text: "Do you agree with the proposal?" },
+        { type: "rating", text: "Rate the presentation so far (1-5)" },
+        { type: "open", text: "What is your main concern?" }
+      ];
     }
-
-    document.getElementById("addQuestion").onclick = () => {
-      questions.push({ type: "yesno", text: "New question" });
-      renderQuestionList();
-    };
 
     document.getElementById("newSession").onclick = async function () {
-      if (!db) {
-        document.getElementById("status").textContent = "Database not ready.";
-        return;
-      }
-      if (questions.length === 0) {
-        alert("Please add at least one question.");
-        return;
-      }
+      if (!db || questions.length === 0) return;
       document.getElementById("status").textContent = "Creating session...";
       try {
         sessionId = Math.random().toString(36).slice(2, 8).toUpperCase();
@@ -133,7 +82,7 @@
           questions: questions,
           currentIndex: 0
         });
-        document.getElementById("editor").style.display = "none";
+        document.getElementById("setup").style.display = "none";
         document.getElementById("session").style.display = "block";
         document.getElementById("code").textContent = sessionId;
         document.getElementById("totalQ").textContent = questions.length;
@@ -145,16 +94,7 @@
         updateQuestion();
       } catch (err) {
         document.getElementById("status").textContent = "Error: " + err.message;
-        console.error(err);
       }
-    };
-
-    document.getElementById("backToEditor").onclick = () => {
-      document.getElementById("session").style.display = "none";
-      document.getElementById("editor").style.display = "block";
-      sessionId = null;
-      currentIndex = 0;
-      allVotes = {};
     };
 
     function listenForVotes() {
@@ -224,9 +164,6 @@
         updateQuestion();
       }
     };
-
-    // Start initialization
-    initFirebase();
   </script>
 </body>
 </html>

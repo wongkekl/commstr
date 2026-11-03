@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Edit Questions - CE Assessment</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 700px; margin: 30px auto; padding: 20px; }
+    button { padding: 8px 14px; margin: 4px; cursor: pointer; }
+    input, select { width: 100%; padding: 8px; margin: 4px 0; box-sizing: border-box; }
+    .question-item { border: 1px solid #ddd; padding: 12px; margin: 10px 0; border-radius: 6px; }
+  </style>
+</head>
+<body>
+  <h1>Edit Questions</h1>
+  <div id="questionList"></div>
+  <button id="addQuestion">+ Add Question</button>
+  <hr>
+  <button id="save">Save Questions</button>
+  <p id="status"></p>
+  <p><a href="presenter.html">Go to Presenter</a></p>
+
+  <script>
+    let questions = [];
+    const saved = localStorage.getItem("ce_questions");
+    if (saved) {
+      questions = JSON.parse(saved);
+    } else {
+      questions = [
+        { type: "yesno", text: "Do you agree with the proposal?" },
+        { type: "rating", text: "Rate the presentation so far (1-5)" },
+        { type: "open", text: "What is your main concern?" }
+      ];
+    }
+
+    function renderQuestionList() {
+      const list = document.getElementById("questionList");
+      list.innerHTML = "";
+      questions.forEach((q, i) => {
+        const div = document.createElement("div");
+        div.className = "question-item";
+        div.innerHTML = `
+          <select data-index="${i}" class="q-type">
+            <option value="yesno" ${q.type === "yesno" ? "selected" : ""}>Yes / No</option>
+            <option value="rating" ${q.type === "rating" ? "selected" : ""}>Rating (1-5)</option>
+            <option value="open" ${q.type === "open" ? "selected" : ""}>Open-ended</option>
+          </select>
+          <input type="text" data-index="${i}" class="q-text" value="${q.text}" placeholder="Question text">
+          <button class="remove" data-index="${i}">Remove</button>
+        `;
+        list.appendChild(div);
+      });
+
+      document.querySelectorAll(".q-type").forEach(el => {
+        el.onchange = () => { questions[el.dataset.index].type = el.value; };
+      });
+      document.querySelectorAll(".q-text").forEach(el => {
+        el.oninput = () => { questions[el.dataset.index].text = el.value; };
+      });
+      document.querySelectorAll(".remove").forEach(el => {
+        el.onclick = () => {
+          questions.splice(el.dataset.index, 1);
+          renderQuestionList();
+        };
+      });
+    }
+
+    document.getElementById("addQuestion").onclick = () => {
+      questions.push({ type: "yesno", text: "New question" });
+      renderQuestionList();
+    };
+
+    document.getElementById("save").onclick = () => {
+      localStorage.setItem("ce_questions", JSON.stringify(questions));
+      document.getElementById("status").textContent = "Questions saved. You can now go to the Presenter page.";
+    };
+
+    renderQuestionList();
+  </script>
+</body>
+</html>
