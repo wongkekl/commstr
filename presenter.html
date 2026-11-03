@@ -8,7 +8,7 @@
   <style>
     body { font-family: system-ui, sans-serif; max-width: 800px; margin: 30px auto; padding: 20px; }
     button { padding: 8px 14px; margin: 4px; cursor: pointer; }
-    input, select, textarea { width: 100%; padding: 8px; margin: 4px 0; box-sizing: border-box; }
+    input, select { width: 100%; padding: 8px; margin: 4px 0; box-sizing: border-box; }
     .question-item { border: 1px solid #ddd; padding: 12px; margin: 10px 0; border-radius: 6px; }
     .bar-container { margin: 10px 0; }
     .bar-label { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 4px; }
@@ -55,14 +55,6 @@
     };
 
     let db = null;
-    try {
-      firebase.initializeApp(firebaseConfig);
-      db = firebase.database();
-      document.getElementById("status").textContent = "Firebase connected ✓";
-    } catch (e) {
-      document.getElementById("status").textContent = "Config problem: " + e.message;
-    }
-
     let questions = [
       { type: "yesno", text: "Do you agree with the proposal?" },
       { type: "rating", text: "Rate the presentation so far (1-5)" },
@@ -71,6 +63,22 @@
     let sessionId = null;
     let currentIndex = 0;
     let allVotes = {};
+
+    function initFirebase() {
+      try {
+        if (typeof firebase === "undefined") {
+          document.getElementById("status").textContent = "Firebase script failed to load. Check your internet connection.";
+          return;
+        }
+        firebase.initializeApp(firebaseConfig);
+        db = firebase.database();
+        document.getElementById("status").textContent = "Firebase connected ✓";
+        renderQuestionList();
+      } catch (e) {
+        document.getElementById("status").textContent = "Config error: " + e.message;
+        console.error(e);
+      }
+    }
 
     function renderQuestionList() {
       const list = document.getElementById("questionList");
@@ -85,3 +93,140 @@
             <option value="open" ${q.type === "open" ? "selected" : ""}>Open-ended</option>
           </select>
           <input type="text" data-index="${i}" class="q-text" value="${q.text}" placeholder="Question text">
+          <button class="remove" data-index="${i}">Remove</button>
+        `;
+        list.appendChild(div);
+      });
+
+      document.querySelectorAll(".q-type").forEach(el => {
+        el.onchange = () => { questions[el.dataset.index].type = el.value; };
+      });
+      document.querySelectorAll(".q-text").forEach(el => {
+        el.oninput = () => { questions[el.dataset.index].text = el.value; };
+      });
+      document.querySelectorAll(".remove").forEach(el => {
+        el.onclick = () => {
+          questions.splice(el.dataset.index, 1);
+          renderQuestionList();
+        };
+      });
+    }
+
+    document.getElementById("addQuestion").onclick = () => {
+      questions.push({ type: "yesno", text: "New question" });
+      renderQuestionList();
+    };
+
+    document.getElementById("newSession").onclick = async function () {
+      if (!db) {
+        document.getElementById("status").textContent = "Database not ready.";
+        return;
+      }
+      if (questions.length === 0) {
+        alert("Please add at least one question.");
+        return;
+      }
+      document.getElementById("status").textContent = "Creating session...";
+      try {
+        sessionId = Math.random().toString(36).slice(2, 8).toUpperCase();
+        await db.ref("sessions/" + sessionId).set({
+          questions: questions,
+          currentIndex: 0
+        });
+        document.getElementById("editor").style.display = "none";
+        document.getElementById("session").style.display = "block";
+        document.getElementById("code").textContent = sessionId;
+        document.getElementById("totalQ").textContent = questions.length;
+
+        const joinUrl = "https://wongkekl.github.io/commstr/join.html?code=" + sessionId;
+        document.getElementById("qr").innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(joinUrl)}" alt="QR Code">`;
+
+        listenForVotes();
+        updateQuestion();
+      } catch (err) {
+        document.getElementById("status").textContent = "Error: " + err.message;
+        console.error(err);
+      }
+    };
+
+    document.getElementById("backToEditor").onclick = () => {
+      document.getElementById("session").style.display = "none";
+      document.getElementById("editor").style.display = "block";
+      sessionId = null;
+      currentIndex = 0;
+      allVotes = {};
+    };
+
+    function listenForVotes() {
+      db.ref("sessions/" + sessionId + "/votes").on("value", function (snap) {
+        allVotes = snap.val() || {};
+        renderResults();
+      });
+    }
+
+    function updateQuestion() {
+      const q = questions[currentIndex];
+      document.getElementById("qIndex").textContent = currentIndex + 1;
+      document.getElementById("questionText").textContent = q.text;
+      if (db && sessionId) {
+        db.ref("sessions/" + sessionId + "/currentIndex").set(currentIndex);
+      }
+      renderResults();
+    }
+
+    function renderResults() {
+      const resultsDiv = document.getElementById("results");
+      const q = questions[currentIndex];
+      if (!q) return;
+
+      const answers = [];
+      for (const key in allVotes) {
+        const vote = allVotes[key];
+        if (vote.questionIndex === currentIndex) {
+          answers.push(vote.answer);
+        }
+      }
+
+      if (answers.length === 0) {
+        resultsDiv.innerHTML = "<p>Waiting for responses...</p>";
+        return;
+      }
+
+      if (q.type === "yesno" || q.type === "rating") {
+        const counts = {};
+        answers.forEach(a => counts[a] = (counts[a] || 0) + 1);
+        const total = answers.length;
+        let html = "";
+        Object.keys(counts).sort().forEach(key => {
+          const count = counts[key];
+          const percent = Math.round((count / total) * 100);
+          html += `
+            <div class="bar-container">
+              <div class="bar-label"><span>${key}</span><span>${count} (${percent}%)</span></div>
+              <div class="bar"><div class="bar-fill" style="width:${percent}%"></div></div>
+            </div>`;
+        });
+        resultsDiv.innerHTML = html;
+      } else if (q.type === "open") {
+        resultsDiv.innerHTML = answers.map(a => `<div class="open-answer">${a}</div>`).join("") || "<p>No responses yet.</p>";
+      }
+    }
+
+    document.getElementById("next").onclick = () => {
+      if (currentIndex < questions.length - 1) {
+        currentIndex++;
+        updateQuestion();
+      }
+    };
+    document.getElementById("prev").onclick = () => {
+      if (currentIndex > 0) {
+        currentIndex--;
+        updateQuestion();
+      }
+    };
+
+    // Start initialization
+    initFirebase();
+  </script>
+</body>
+</html>
